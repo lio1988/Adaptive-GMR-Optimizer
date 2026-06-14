@@ -1,0 +1,3 @@
+from adaptive_gmr import AdaptiveGMRAdamW
+
+optimizer = AdaptiveGMRAdamW(model.parameters(), lr=1e-4, alpha=0.5)
