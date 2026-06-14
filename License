@@ -1,0 +1,7 @@
+---
+
+### 4. Setup Αρχεία (Για να είναι Installable)
+
+**`requirements.txt`**:
+```text
+torch>=1.10.0
