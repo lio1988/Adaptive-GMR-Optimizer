@@ -1,10 +1,15 @@
-# AdaptiveGMRAdamW: Robust Optimizer for LLMs
+# Adaptive-GMR-Optimizer
 
-The `AdaptiveGMRAdamW` is a drop-in replacement for AdamW designed to automatically suppress gradient spikes using the Geman-McClure robust estimator. 
+`Adaptive-GMR-Optimizer` is a drop-in replacement for PyTorch's AdamW. It incorporates the **Geman-McClure** robust estimator to dynamically scale gradients, providing an "auto-immune" response to training instabilities (gradient spikes) without manual tuning.
 
-### Why GMR?
-Standard gradient clipping is often too rigid. Our implementation uses an adaptive threshold (GMR) that dynamically scales gradients, effectively "healing" the model during unstable training phases without manual hyperparameter tuning.
+## Why use this?
+- **Stability:** Prevents `NaN` losses and gradient explosion.
+- **Adaptive:** No need to guess `clip_norm` values; the optimizer "senses" the training state.
+- **Drop-in:** Compatible with any standard PyTorch `nn.Module`.
 
-### Installation
-```bash
-pip install .
+## Quick Start
+```python
+from adaptive_gmr import AdaptiveGMRAdamW
+
+# Replace torch.optim.AdamW with AdaptiveGMRAdamW
+optimizer = AdaptiveGMRAdamW(model.parameters(), lr=1e-3, alpha=0.5)
