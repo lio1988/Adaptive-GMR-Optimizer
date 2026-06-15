@@ -1,71 +1,136 @@
-import torch
-from torch.optim import AdamW as TorchAdamW
+"""Production AdaptiveGMR optimizer — Adam with Geman-McClure gradient filtering."""
 
-class AdaptiveGMRAdamW(TorchAdamW):
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, 
-                 weight_decay=1e-2, alpha=1.0, alpha_decay=0.999, 
-                 min_alpha=0.1, theta_init=1.0, ema_decay=0.99):
-        
-        super().__init__(params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
-        self.alpha = alpha
-        self.alpha_decay = alpha_decay
-        self.min_alpha = min_alpha
-        self.ema_decay = ema_decay
-        self.state['running_norm'] = torch.tensor(theta_init, dtype=torch.float32)
-        
+from __future__ import annotations
+
+import math
+from typing import Any, Dict, Optional, Tuple
+
+import torch
+from torch import Tensor
+from torch.optim import Optimizer
+
+
+class AdaptiveGMR(Optimizer):
+    """
+    Adam-style optimizer with element-wise Geman-McClure gradient filtering.
+
+    Before moment updates, gradients are filtered in-place as::
+
+        grad = grad / (((grad / sigma) ** 2 + 1) ** 2)
+
+    Compatible with standard PyTorch training loops and Hugging Face Accelerate.
+    """
+
+    def __init__(
+        self,
+        params,
+        lr: float = 1e-3,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
+        sigma: float = 1.0,
+    ) -> None:
+        if lr < 0.0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        if eps < 0.0:
+            raise ValueError(f"Invalid epsilon value: {eps}")
+        if not 0.0 <= beta1 < 1.0:
+            raise ValueError(f"Invalid beta1 parameter: {beta1}")
+        if not 0.0 <= beta2 < 1.0:
+            raise ValueError(f"Invalid beta2 parameter: {beta2}")
+        if sigma <= 0.0:
+            raise ValueError(f"sigma must be positive, got {sigma}")
+
+        defaults = dict(lr=lr, beta1=beta1, beta2=beta2, eps=eps, sigma=sigma)
+        super().__init__(params, defaults)
+
+    def __repr__(self) -> str:
+        lr = self.param_groups[0]["lr"] if self.param_groups else 0.0
+        sigma = self.param_groups[0]["sigma"] if self.param_groups else 0.0
+        n = sum(len(g["params"]) for g in self.param_groups)
+        return f"{self.__class__.__name__}(lr={lr}, sigma={sigma}, params={n})"
+
+    @staticmethod
+    def _apply_gmr_inplace(grad: Tensor, sigma: float) -> None:
+        """
+        Apply Geman-McClure influence function element-wise in-place.
+
+        grad = grad / (((grad / sigma) ** 2 + 1) ** 2)
+        """
+        denom = grad.clone()
+        denom.div_(sigma)
+        denom.pow_(2)
+        denom.add_(1.0)
+        denom.pow_(2)
+        grad.div_(denom)
+
+    @torch.no_grad()
     def step(self, closure=None):
         loss = None
         if closure is not None:
             with torch.enable_grad():
                 loss = closure()
 
-        if self.alpha > self.min_alpha:
-            self.alpha *= self.alpha_decay
-        
-        # 1. Υπολογισμός Global Gradient Norm Squared (||g||^2)
-        global_norm_sq = 0.0
-        device = None
         for group in self.param_groups:
-            for p in group['params']:
-                if p.grad is not None:
-                    if device is None: device = p.grad.device
-                    global_norm_sq += torch.sum(p.grad.data**2)
-        
-        global_norm = torch.sqrt(global_norm_sq)
-        
-        if getattr(self.state['running_norm'], 'device', None) != device:
-             self.state['running_norm'] = self.state['running_norm'].to(device)
+            beta1, beta2 = group["beta1"], group["beta2"]
+            lr, eps, sigma = group["lr"], group["eps"], group["sigma"]
 
-        # 2. Ενημέρωση του Running Norm (έχει μονάδες U)
-        self.state['running_norm'] = (self.ema_decay * self.state['running_norm'] + 
-                                     (1 - self.ema_decay) * global_norm)
-        
-        # 3. Υπολογισμός Θ (έχει μονάδες U)
-        theta = self.alpha * self.state['running_norm']
-        
-        # 4. Geman-McClure GLOBAL Scaling: theta^2 / (theta^2 + ||g||^2)
-        # Και τα δύο μέρη είναι U^2, άρα το scaling είναι dimensionless [0, 1]
-        theta_sq = theta**2
-        scaling = theta_sq / (theta_sq + global_norm_sq + 1e-8)
-        
-        # 5. Εφαρμογή GLOBAL scaling (διατηρεί την κατεύθυνση του gradient)
-        for group in self.param_groups:
-            for p in group['params']:
-                if p.grad is not None:
-                    p.grad.data.mul_(scaling)
-                
-        super().step(closure)
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+
+                grad = p.grad
+                if grad.is_sparse:
+                    raise RuntimeError("AdaptiveGMR does not support sparse gradients")
+
+                state = self.state[p]
+                if len(state) == 0:
+                    state["step"] = torch.tensor(0.0, dtype=torch.float32, device=p.device)
+                    state["exp_avg"] = torch.zeros_like(
+                        p, memory_format=torch.preserve_format
+                    )
+                    state["exp_avg_sq"] = torch.zeros_like(
+                        p, memory_format=torch.preserve_format
+                    )
+
+                exp_avg: Tensor = state["exp_avg"]
+                exp_avg_sq: Tensor = state["exp_avg_sq"]
+
+                self._apply_gmr_inplace(grad, sigma)
+
+                state["step"] += 1
+                step_val = state["step"].item()
+
+                exp_avg.mul_(beta1).add_(grad, alpha=1.0 - beta1)
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1.0 - beta2)
+
+                bias_correction1 = 1.0 - beta1 ** step_val
+                bias_correction2 = 1.0 - beta2 ** step_val
+
+                denom = exp_avg_sq.sqrt().add_(eps)
+                step_size = lr * math.sqrt(bias_correction2) / bias_correction1
+                p.addcdiv_(exp_avg, denom, value=-step_size)
+
         return loss
 
 
-import numpy as np
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
+class AdaptiveGMRAdamW(AdaptiveGMR):
+    """Backward-compatible alias for the legacy AdaptiveGMRAdamW API."""
 
-np.random.seed(42)
+    def __init__(
+        self,
+        params,
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 1e-2,
+        alpha: float = 1.0,
+        **kwargs: Any,
+    ) -> None:
+        if weight_decay != 0.0:
+            import warnings
 
+<<<<<<< Updated upstream
 # ══════════════════════════════════════════════════════════════════
 # KEY INSIGHT FOR LARGE MODELS:
 #
@@ -356,3 +421,20 @@ ax6.set_title('Multi-GPU Architecture',fontweight='bold',fontsize=11,pad=10)
 
 plt.savefig('gmr_large_scale.png', dpi=150,bbox_inches='tight',facecolor=BG)
 print("\n✅ Done.")
+=======
+            warnings.warn(
+                "AdaptiveGMRAdamW no longer applies decoupled weight decay; "
+                "weight_decay is ignored.",
+                UserWarning,
+                stacklevel=2,
+            )
+        super().__init__(
+            params,
+            lr=lr,
+            beta1=betas[0],
+            beta2=betas[1],
+            eps=eps,
+            sigma=alpha,
+            **kwargs,
+        )
+>>>>>>> Stashed changes
