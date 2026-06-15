@@ -1,15 +1,13 @@
 # Adaptive-GMR-Optimizer
 
-`Adaptive-GMR-Optimizer` is a drop-in replacement for PyTorch's AdamW. It incorporates the **Geman-McClure** robust estimator to dynamically scale gradients, providing an "auto-immune" response to training instabilities (gradient spikes) without manual tuning.
+Ένας παραγωγικός (production-ready) optimizer για Deep Learning μοντέλα, που ενσωματώνει **Geman-McClure Robust Statistics** για προστασία από **loss spikes**.
 
-## Why use this?
-- **Stability:** Prevents `NaN` losses and gradient explosion.
-- **Adaptive:** No need to guess `clip_norm` values; the optimizer "senses" the training state.
-- **Drop-in:** Compatible with any standard PyTorch `nn.Module`.
+## Κύρια Χαρακτηριστικά
+* **Spike Protection**: Προστατεύει τα "moments" του AdamW από μόλυνση κατά τη διάρκεια ξαφνικών spikes.
+* **Zero Memory Overhead**: Το scaling των gradients γίνεται `in-place`, χωρίς να αντιγράφονται παράμετροι στη VRAM.
+* **Distributed Compatible**: Σχεδιασμένος για DDP, FSDP και ZeRO, με scaling πριν το reduction.
+* **Drop-in Replacement**: Κληρονομεί τον `torch.optim.AdamW`, οπότε λειτουργεί άμεσα με το υπάρχον training loop σου.
 
-## Quick Start
-```python
-from adaptive_gmr import AdaptiveGMRAdamW
-
-# Replace torch.optim.AdamW with AdaptiveGMRAdamW
-optimizer = AdaptiveGMRAdamW(model.parameters(), lr=1e-3, alpha=0.5)
+## Εγκατάσταση
+```bash
+pip install .
