@@ -11,3 +11,7 @@
 ## Εγκατάσταση
 ```bash
 pip install .
+
+
+
+<img width="2552" height="1579" alt="gmr_large_scale" src="https://github.com/user-attachments/assets/39ac9d11-26d8-4d24-9ecd-881530cacc44" />
