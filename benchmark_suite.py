@@ -162,7 +162,7 @@ def run_benchmark():
     # Δημιουργία τελικού πίνακα για εύκολη αντιγραφή στο Markdown
     final_df = pd.DataFrame(summary_table).T
     final_df.columns = [f"Spike {int(s)}" for s in spike_sizes]
-    final_df = final_df.applymap(lambda x: f"{x:.1f}%")
+    final_df = final_df.map(lambda x: f"{x:.1f}%")
     
     print(final_df.to_markdown())
     print("\nΤα αναλυτικά δεδομένα αποθηκεύτηκαν στο 'benchmark_detailed_results.csv'")
