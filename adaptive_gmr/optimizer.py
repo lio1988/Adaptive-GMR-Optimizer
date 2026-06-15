@@ -354,5 +354,5 @@ GA ✓ (scaling per accumulation step)
 ax6.text(0.05,0.95,design,transform=ax6.transAxes, fontsize=8.5,va='top',fontfamily='monospace', bbox=dict(boxstyle='round',facecolor='#EBF5FB',alpha=0.9))
 ax6.set_title('Multi-GPU Architecture',fontweight='bold',fontsize=11,pad=10)
 
-plt.savefig('/mnt/user-data/outputs/gmr_large_scale.png', dpi=150,bbox_inches='tight',facecolor=BG)
+plt.savefig('gmr_large_scale.png', dpi=150,bbox_inches='tight',facecolor=BG)
 print("\n✅ Done.")
