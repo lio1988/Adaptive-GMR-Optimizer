@@ -9,9 +9,24 @@
 * **Drop-in Replacement**: Κληρονομεί τον `torch.optim.AdamW`, οπότε λειτουργεί άμεσα με το υπάρχον training loop σου.
 
 ## Εγκατάσταση
+
+Συνιστάται η χρήση virtualenv/conda και Python 3.8 ή νεότερης.
+
+1) Εγκατάσταση απευθείας από το GitHub (για εξωτερικούς χρήστες):
+
+```bash
+pip install git+https://github.com/lio1988/Adaptive-GMR-Optimizer.git
+```
+
+2) Τοπική εγκατάσταση / ανάπτυξη (developer):
+
+- Εγκατάσταση (σταθερή):
 ```bash
 pip install .
+```
+- Editable εγκατάσταση (για ενεργή ανάπτυξη):
+```bash
+pip install -e .
+```
 
-
-
-
+Σημείωση: Βεβαιωθείτε ότι έχετε εγκαταστήσει μια συμβατή έκδοση του PyTorch πριν την εγκατάσταση, π.χ. `pip install torch torchvision`.
