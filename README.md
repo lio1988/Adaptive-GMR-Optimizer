@@ -1,6 +1,6 @@
 # Adaptive-GMR-Optimizer
 
-Ένας παραγωγικός (production-ready) optimizer για Deep Learning μοντέλα, που ενσωματώνει **Geman-McClure Robust Statistics** για προστασία από **loss spikes**.
+Ένας παραγωγικός (production-ready) optimizer για Deep Learning μοντέλα, για προστασία από **loss spikes**.
 
 ## Κύρια Χαρακτηριστικά
 * **Spike Protection**: Προστατεύει τα "moments" του AdamW από μόλυνση κατά τη διάρκεια ξαφνικών spikes.
